@@ -20,18 +20,18 @@ export async function PUT(
     const { price, mileage, description, images, isAvailable } =
       await req.json()
 
-    // Get user dealership
+    // Get user dealership (owner or manager)
     const dealershipResult = await query(
       `SELECT d.id FROM "Dealership" d
        LEFT JOIN "UserDealership" ud ON d.id = ud."dealershipId"
        LEFT JOIN "User" u ON ud."userId" = u.id
-       WHERE u.email = $1 AND ud.role = 'owner'`,
+       WHERE u.email = $1 AND ud.role IN ('owner', 'manager')`,
       [session.user.email]
     )
 
     if (dealershipResult.rows.length === 0) {
       return NextResponse.json(
-        { error: 'Vous n\'avez pas de concessionnaire' },
+        { error: 'Vous n\'avez pas les droits d\'accès pour ce concessionnaire' },
         { status: 403 }
       )
     }
@@ -139,18 +139,18 @@ export async function DELETE(
   }
 
   try {
-    // Get user dealership
+    // Get user dealership (owner or manager)
     const dealershipResult = await query(
       `SELECT d.id FROM "Dealership" d
        LEFT JOIN "UserDealership" ud ON d.id = ud."dealershipId"
        LEFT JOIN "User" u ON ud."userId" = u.id
-       WHERE u.email = $1 AND ud.role = 'owner'`,
+       WHERE u.email = $1 AND ud.role IN ('owner', 'manager')`,
       [session.user.email]
     )
 
     if (dealershipResult.rows.length === 0) {
       return NextResponse.json(
-        { error: 'Vous n\'avez pas de concessionnaire' },
+        { error: 'Vous n\'avez pas les droits d\'accès pour ce concessionnaire' },
         { status: 403 }
       )
     }

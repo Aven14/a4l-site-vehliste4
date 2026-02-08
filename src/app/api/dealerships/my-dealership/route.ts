@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
        LEFT JOIN "UserDealership" ud ON d.id = ud."dealershipId"
        LEFT JOIN "User" u ON ud."userId" = u.id
        LEFT JOIN "DealershipListing" dl ON d.id = dl."dealershipId"
-       WHERE u.email = $1 AND ud.role = 'owner'
+       WHERE u.email = $1 AND ud.role IN ('owner', 'manager')
        GROUP BY d.id`,
       [session.user.email]
     )
@@ -69,7 +69,7 @@ export async function PUT(req: NextRequest) {
        FROM "User" u
        LEFT JOIN "UserDealership" ud ON u.id = ud."userId"
        LEFT JOIN "Dealership" d ON ud."dealershipId" = d.id
-       WHERE u.email = $1 AND ud.role = 'owner'`,
+       WHERE u.email = $1 AND ud.role IN ('owner', 'manager')`,
       [session.user.email]
     )
 

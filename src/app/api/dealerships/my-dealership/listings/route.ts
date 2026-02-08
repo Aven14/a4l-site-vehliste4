@@ -14,18 +14,18 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Récupérer le concessionnaire
+    // Récupérer le concessionnaire (owner ou manager)
     const dealershipResult = await query(
       `SELECT d.id FROM "Dealership" d
        LEFT JOIN "UserDealership" ud ON d.id = ud."dealershipId"
        LEFT JOIN "User" u ON ud."userId" = u.id
-       WHERE u.email = $1 AND ud.role = 'owner'`,
+       WHERE u.email = $1 AND ud.role IN ('owner', 'manager')`,
       [session.user.email]
     )
 
     if (dealershipResult.rows.length === 0) {
       return NextResponse.json(
-        { error: 'Vous n\'avez pas de concessionnaire' },
+        { error: 'Vous n\'avez pas les droits d\'accès pour ce concessionnaire' },
         { status: 403 }
       )
     }
@@ -89,84 +89,86 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { vehicleId, price, mileage, description, images } =
-      await req.json()
+    const { vehicleId, price, mileage, description, images } = await req.json()
 
     if (!vehicleId || price === undefined) {
+      return NextResponse.json({ error: 'Données manquantes' }, { status: 400 })
+    }
+
+    // Récupérer l'utilisateur avec son appartenance à un concessionnaire
+    const userWithDealership = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      include: {
+        dealershipMemberships: {
+          include: {
+            dealership: true
+          }
+        }
+      }
+    })
+
+    const membership = userWithDealership?.dealershipMemberships.find(
+      (m: any) => m.role === 'owner' || m.role === 'manager'
+    )
+
+    if (!membership) {
       return NextResponse.json(
-        { error: 'Données manquantes' },
-        { status: 400 }
+        { error: 'Vous n\'avez pas les droits pour créer une annonce pour ce concessionnaire' },
+        { status: 403 }
       )
     }
 
-    // Get dealership ID
-    const dealershipResult = await query(
-      `SELECT d.id FROM "Dealership" d
-       LEFT JOIN "UserDealership" ud ON d.id = ud."dealershipId"
-       LEFT JOIN "User" u ON ud."userId" = u.id
-       WHERE u.email = $1 AND ud.role = 'owner'`,
-      [session.user.email]
-    )
-
-    if (dealershipResult.rows.length === 0) {
-    }
-
-    const dealershipId = dealershipResult.rows[0].id
+    const dealershipId = membership.dealershipId
 
     // Vérifier que le véhicule existe
-    const vehicleResult = await query(
-      `SELECT id FROM "Vehicle" WHERE id = $1`,
-      [vehicleId]
-    )
+    const vehicle = await prisma.vehicle.findUnique({
+      where: { id: vehicleId }
+    })
 
-    if (vehicleResult.rows.length === 0) {
-      return NextResponse.json(
-        { error: 'Véhicule non trouvé' },
-        { status: 404 }
-      )
+    if (!vehicle) {
+      return NextResponse.json({ error: 'Véhicule non trouvé' }, { status: 404 })
     }
 
     // Vérifier qu'il n'existe pas déjà une annonce pour ce véhicule
-    const existingResult = await query(
-      `SELECT id FROM "DealershipListing" WHERE "dealershipId" = $1 AND "vehicleId" = $2`,
-      [dealershipId, vehicleId]
-    )
+    const existingListing = await prisma.dealershipListing.findUnique({
+      where: {
+        dealershipId_vehicleId: {
+          dealershipId,
+          vehicleId
+        }
+      }
+    })
 
-    if (existingResult.rows.length > 0) {
+    if (existingListing) {
       return NextResponse.json(
         { error: 'Vous avez déjà une annonce pour ce véhicule' },
         { status: 400 }
       )
     }
 
-    const listingResult = await query(
-      `INSERT INTO "DealershipListing" ("dealershipId", "vehicleId", price, mileage, description, images, "isAvailable", "createdAt", "updatedAt")
-       VALUES ($1, $2, $3, $4, $5, $6, true, NOW(), NOW())
-       RETURNING *`,
-      [
+    // Créer l'annonce via Prisma (plus sûr pour les IDs et les types)
+    const listing = await prisma.dealershipListing.create({
+      data: {
         dealershipId,
         vehicleId,
         price,
-        mileage || null,
-        description || null,
-        images ? JSON.stringify(images) : null
-      ]
-    )
+        mileage: mileage || null,
+        description: description || null,
+        images: images ? JSON.stringify(images) : null,
+        isAvailable: true
+      },
+      include: {
+        vehicle: {
+          include: {
+            brand: true
+          }
+        }
+      }
+    })
 
-    // Récupérer les détails complets de l'annonce créée
-    const fullListingResult = await query(
-      `SELECT dl.id, dl.price, dl.mileage, dl.description, dl.images, dl."isAvailable",
-              v.id as vehicle_id, v.name, v.description as vehicle_description,
-              v.price as vehicle_price, v.power, v.trunk, v.vmax, v.seats, v.images as vehicle_images,
-              b.id as brand_id, b.name as brand_name, b.logo as brand_logo
-       FROM "DealershipListing" dl
-       JOIN "Vehicle" v ON dl."vehicleId" = v.id
-       JOIN "Brand" b ON v."brandId" = b.id
-       WHERE dl.id = $1`,
-      [listingResult.rows[0].id]
-    )
-
-    return NextResponse.json(fullListingResult.rows[0], { status: 201 })
+    // Transformer pour correspondre au format attendu par le client (si nécessaire)
+    // Ici Prisma retourne déjà un objet avec vehicle.brand
+    return NextResponse.json(listing, { status: 201 })
   } catch (error) {
     console.error('Erreur création annonce:', error)
     return NextResponse.json(
@@ -175,3 +177,4 @@ export async function POST(req: NextRequest) {
     )
   }
 }
+
