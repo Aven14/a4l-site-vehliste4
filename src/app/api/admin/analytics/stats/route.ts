@@ -55,16 +55,52 @@ export async function GET(req: NextRequest) {
       }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // 2. Top pages
+    // 2. Top pages avec résolution des noms
     const pageCounts: Record<string, number> = {};
     visits.forEach((v: any) => {
       pageCounts[v.path] = (pageCounts[v.path] || 0) + 1;
     });
 
-    const topPages = Object.entries(pageCounts)
+    const topPagesRaw = Object.entries(pageCounts)
       .map(([path, count]) => ({ path, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
+
+    // Résolution des IDs en noms
+    const topPages = await Promise.all(topPagesRaw.map(async (p) => {
+      if (p.path.startsWith('/vehicles/')) {
+        const id = p.path.split('/')[2];
+        if (id) {
+          const vehicle = await prisma.vehicle.findUnique({ 
+            where: { id },
+            select: { name: true, brand: { select: { name: true } } }
+          });
+          if (vehicle) return { ...p, title: `${vehicle.brand.name} ${vehicle.name}` };
+        }
+      }
+      if (p.path.startsWith('/brands/')) {
+        const id = p.path.split('/')[2];
+        if (id) {
+          const brand = await prisma.brand.findUnique({ 
+            where: { id },
+            select: { name: true }
+          });
+          if (brand) return { ...p, title: `Marque: ${brand.name}` };
+        }
+      }
+      
+      const titles: Record<string, string> = {
+        '/': 'Accueil',
+        '/vehicles': 'Catalogue Véhicules',
+        '/brands': 'Liste des Marques',
+        '/dealerships': 'Concessionnaires',
+        '/account': 'Mon Compte',
+        '/auth/login': 'Connexion',
+        '/auth/register': 'Inscription',
+      };
+
+      return { ...p, title: titles[p.path] || p.path };
+    }));
 
     // 3. Totaux
     const totalTodayViews = visits.filter((v: any) => v.createdAt >= startOfDay(now)).length;

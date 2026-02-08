@@ -15,7 +15,7 @@ import {
 
 interface StatsData {
   chartData: { date: string; views: number; visitors: number }[]
-  topPages: { path: string; count: number }[]
+  topPages: { path: string; count: number; title: string }[]
   totals: {
     today: { views: number; visitors: number }
     week: { views: number; visitors: number }
@@ -132,8 +132,8 @@ export default function AdminStats() {
               <div key={page.path} className="flex items-center justify-between group">
                 <div className="flex items-center gap-3">
                   <span className="text-gray-600 font-mono text-sm w-4">{i + 1}</span>
-                  <span className="text-gray-300 text-sm truncate max-w-[200px] group-hover:text-primary-400 transition-colors">
-                    {page.path === '/' ? 'Accueil' : page.path}
+                  <span className="text-gray-300 text-sm truncate max-w-[250px] group-hover:text-primary-400 transition-colors" title={page.path}>
+                    {page.title}
                   </span>
                 </div>
                 <div className="flex items-center gap-4">
