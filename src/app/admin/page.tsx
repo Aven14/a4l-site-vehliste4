@@ -3,6 +3,7 @@ import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
+import AdminStats from '@/components/AdminStats'
 
 // Force dynamic rendering for Vercel serverless
 export const dynamic = 'force-dynamic'
@@ -34,7 +35,18 @@ export default async function AdminPage() {
         <p className="text-gray-400 mb-2">Bienvenue, {session.user?.name || session.user?.email}</p>
         <p className="text-sm text-primary-400 mb-12">Rôle : {user.roleName || 'user'}</p>
 
-        {/* Stats */}
+        {/* Statistiques Avancées */}
+        <div className="mb-12">
+          <h2 className="font-display text-2xl font-bold text-white mb-6 uppercase tracking-widest flex items-center gap-2">
+            <span className="text-primary-400">📊</span> Statistiques de visite
+          </h2>
+          <AdminStats />
+        </div>
+
+        {/* Stats de contenu */}
+        <h2 className="font-display text-2xl font-bold text-white mb-6 uppercase tracking-widest flex items-center gap-2">
+          <span className="text-primary-400">📦</span> Contenu du site
+        </h2>
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
           <div className="card p-6">
             <div className="text-gray-500 mb-1">Marques</div>

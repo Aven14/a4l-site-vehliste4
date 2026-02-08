@@ -160,3 +160,17 @@ model DealershipListing {
   
   @@unique([dealershipId, vehicleId])
 }
+
+// Suivi des visites
+model PageVisit {
+  id        String   @id @default(cuid())
+  path      String   // Chemin de la page (ex: /vehicles/id)
+  referer   String?  // D'où vient l'utilisateur
+  userAgent String?  // Navigateur/Appareil
+  ip        String?  // IP (optionnel, attention RGPD)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([path])
+}
+
