@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 
 export async function POST(req: NextRequest) {
   try {
-    const { path } = await req.json();
+    const { path, sessionId } = await req.json();
     
     if (!path) {
       return NextResponse.json({ error: 'Path is required' }, { status: 400 });
@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
     await prisma.pageVisit.create({
       data: {
         path,
+        sessionId,
         userAgent,
         referer,
       }

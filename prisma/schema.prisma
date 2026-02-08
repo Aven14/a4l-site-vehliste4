@@ -165,6 +165,7 @@ model DealershipListing {
 model PageVisit {
   id        String   @id @default(cuid())
   path      String   // Chemin de la page (ex: /vehicles/id)
+  sessionId String?  // Identifiant de session pour les visiteurs uniques
   referer   String?  // D'où vient l'utilisateur
   userAgent String?  // Navigateur/Appareil
   ip        String?  // IP (optionnel, attention RGPD)
@@ -172,5 +173,6 @@ model PageVisit {
 
   @@index([createdAt])
   @@index([path])
+  @@index([sessionId])
 }
 

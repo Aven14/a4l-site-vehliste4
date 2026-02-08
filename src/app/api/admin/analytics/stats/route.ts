@@ -22,7 +22,8 @@ export async function GET(req: NextRequest) {
       },
       select: {
         createdAt: true,
-        path: true
+        path: true,
+        sessionId: true
       },
       orderBy: {
         createdAt: 'asc'
@@ -30,21 +31,28 @@ export async function GET(req: NextRequest) {
     });
 
     // Groupement par jour
-    const dailyStats: Record<string, number> = {};
+    const dailyStats: Record<string, { views: number, visitors: Set<string> }> = {};
     for (let i = 0; i < 30; i++) {
       const date = format(subDays(now, i), 'yyyy-MM-dd');
-      dailyStats[date] = 0;
+      dailyStats[date] = { views: 0, visitors: new Set() };
     }
 
     visits.forEach((v: any) => {
       const date = format(v.createdAt, 'yyyy-MM-dd');
       if (dailyStats[date] !== undefined) {
-        dailyStats[date]++;
+        dailyStats[date].views++;
+        if (v.sessionId) {
+          dailyStats[date].visitors.add(v.sessionId);
+        }
       }
     });
 
     const chartData = Object.entries(dailyStats)
-      .map(([date, count]) => ({ date, count }))
+      .map(([date, data]) => ({ 
+        date, 
+        views: data.views, 
+        visitors: data.visitors.size 
+      }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
     // 2. Top pages
@@ -59,17 +67,22 @@ export async function GET(req: NextRequest) {
       .slice(0, 10);
 
     // 3. Totaux
-    const totalToday = visits.filter((v: any) => v.createdAt >= startOfDay(now)).length;
-    const totalWeek = visits.filter((v: any) => v.createdAt >= subDays(now, 7)).length;
-    const totalMonth = visits.length;
+    const totalTodayViews = visits.filter((v: any) => v.createdAt >= startOfDay(now)).length;
+    const totalTodayVisitors = new Set(visits.filter((v: any) => v.createdAt >= startOfDay(now)).map((v: any) => v.sessionId)).size;
+    
+    const totalWeekViews = visits.filter((v: any) => v.createdAt >= subDays(now, 7)).length;
+    const totalWeekVisitors = new Set(visits.filter((v: any) => v.createdAt >= subDays(now, 7)).map((v: any) => v.sessionId)).size;
+    
+    const totalMonthViews = visits.length;
+    const totalMonthVisitors = new Set(visits.map((v: any) => v.sessionId)).size;
 
     return NextResponse.json({
       chartData,
       topPages,
       totals: {
-        today: totalToday,
-        week: totalWeek,
-        month: totalMonth
+        today: { views: totalTodayViews, visitors: totalTodayVisitors },
+        week: { views: totalWeekViews, visitors: totalWeekVisitors },
+        month: { views: totalMonthViews, visitors: totalMonthVisitors }
       }
     });
   } catch (error) {

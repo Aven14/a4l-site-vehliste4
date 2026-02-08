@@ -14,12 +14,12 @@ import {
 } from 'recharts'
 
 interface StatsData {
-  chartData: { date: string; count: number }[]
+  chartData: { date: string; views: number; visitors: number }[]
   topPages: { path: string; count: number }[]
   totals: {
-    today: number
-    week: number
-    month: number
+    today: { views: number; visitors: number }
+    week: { views: number; visitors: number }
+    month: { views: number; visitors: number }
   }
 }
 
@@ -41,23 +41,39 @@ export default function AdminStats() {
   }, [])
 
   if (loading) return <div className="text-gray-500 animate-pulse">Chargement des statistiques...</div>
-  if (!data) return null
+  if (!data || !data.totals) return (
+    <div className="card p-6 border-red-500/20 text-red-400 text-sm">
+      Impossible de charger les statistiques. Vérifiez que la table <code className="bg-red-500/10 px-1 rounded">PageVisit</code> existe dans la base de données.
+    </div>
+  )
 
   return (
     <div className="space-y-8">
       {/* Cards de visite */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="card p-6 border-primary-500/20">
-          <div className="text-gray-400 text-sm mb-1 uppercase tracking-wider">Visites Aujourd'hui</div>
-          <div className="font-display text-4xl font-bold text-white">{data.totals.today}</div>
+          <div className="text-gray-400 text-xs mb-1 uppercase tracking-wider">Aujourd'hui</div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-display text-4xl font-bold text-white">{data.totals.today.visitors}</span>
+            <span className="text-gray-500 text-xs">visiteurs</span>
+          </div>
+          <div className="text-primary-400 text-xs mt-1">{data.totals.today.views} vues de pages</div>
         </div>
         <div className="card p-6 border-blue-500/20">
-          <div className="text-gray-400 text-sm mb-1 uppercase tracking-wider">7 derniers jours</div>
-          <div className="font-display text-4xl font-bold text-white">{data.totals.week}</div>
+          <div className="text-gray-400 text-xs mb-1 uppercase tracking-wider">7 derniers jours</div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-display text-4xl font-bold text-white">{data.totals.week.visitors}</span>
+            <span className="text-gray-500 text-xs">visiteurs</span>
+          </div>
+          <div className="text-blue-400 text-xs mt-1">{data.totals.week.views} vues de pages</div>
         </div>
         <div className="card p-6 border-purple-500/20">
-          <div className="text-gray-400 text-sm mb-1 uppercase tracking-wider">30 derniers jours</div>
-          <div className="font-display text-4xl font-bold text-white">{data.totals.month}</div>
+          <div className="text-gray-400 text-xs mb-1 uppercase tracking-wider">30 derniers jours</div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-display text-4xl font-bold text-white">{data.totals.month.visitors}</span>
+            <span className="text-gray-500 text-xs">visiteurs</span>
+          </div>
+          <div className="text-purple-400 text-xs mt-1">{data.totals.month.views} vues de pages</div>
         </div>
       </div>
 
@@ -85,10 +101,20 @@ export default function AdminStats() {
                 />
                 <Line 
                   type="monotone" 
-                  dataKey="count" 
+                  dataKey="views" 
+                  name="Vues de pages"
                   stroke="#a855f7" 
                   strokeWidth={2} 
                   dot={{ r: 4, fill: '#a855f7' }}
+                  activeDot={{ r: 6 }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="visitors" 
+                  name="Visiteurs uniques"
+                  stroke="#3b82f6" 
+                  strokeWidth={2} 
+                  dot={{ r: 4, fill: '#3b82f6' }}
                   activeDot={{ r: 6 }}
                 />
               </LineChart>
