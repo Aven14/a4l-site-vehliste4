@@ -1,0 +1,797 @@
+'use client'
+
+import { useState, useEffect, useMemo } from 'react'
+import { useSession } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
+import ImageUpload from '@/components/ImageUpload'
+
+interface DealershipInfo {
+  id: string
+  name: string
+  description: string | null
+  logo: string | null
+  _count: {
+    listings: number
+  }
+}
+
+interface DealershipInfo {
+  id: string
+  name: string
+  description: string | null
+  logo: string | null
+  _count: {
+    listings: number
+  }
+}
+
+interface Brand {
+  id: string
+  name: string
+  logo: string | null
+}
+
+interface Vehicle {
+  id: string
+  name: string
+  brand: { id: string; name: string }
+  price: number
+  power: number | null
+  images: string
+}
+
+interface Listing {
+  id: string
+  price: number
+  mileage: number | null
+  images: string | null
+  description: string | null
+  vehicle: Vehicle
+}
+
+export default function DealershipDashboard() {
+  const { data: session, status } = useSession()
+  const router = useRouter()
+  const [listings, setListings] = useState<Listing[]>([])
+  const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  const [brands, setBrands] = useState<Brand[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const [selectedBrand, setSelectedBrand] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [imageUrls, setImageUrls] = useState<string[]>([])
+  const [dealershipInfo, setDealershipInfo] = useState<DealershipInfo | null>(null)
+  const [isEditingDealership, setIsEditingDealership] = useState(false)
+  const [invitations, setInvitations] = useState<any[]>([])
+  const [newInviteEmail, setNewInviteEmail] = useState('')
+  const [newInviteRole, setNewInviteRole] = useState('employee')
+  const [inviteLoading, setInviteLoading] = useState(false)
+  const [inviteMessage, setInviteMessage] = useState('')
+  const [inviteError, setInviteError] = useState('')
+  const [dealershipEditForm, setDealershipEditForm] = useState({
+    name: '',
+    description: '',
+  })
+
+  const [formData, setFormData] = useState({
+    vehicleId: '',
+    price: '',
+    mileage: '',
+    description: '',
+  })
+  const [useSiteImages, setUseSiteImages] = useState(true)
+
+  useEffect(() => {
+    if (status === 'unauthenticated') router.push('/auth/login')
+  }, [status, router])
+
+  useEffect(() => {
+    if (session?.user) {
+      // Récupérer les annonces
+      fetch('/api/dealerships/my-dealership/listings')
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            setListings(data)
+          }
+          setLoading(false)
+        })
+
+      // Récupérer les infos du concessionnaire
+      fetch('/api/dealerships/my-dealership')
+        .then(res => res.json())
+        .then(data => {
+          if (data.id) {
+            setDealershipInfo(data)
+            setDealershipEditForm({
+              name: data.name,
+              description: data.description || '',
+            })
+          }
+        })
+
+      // Récupérer tous les véhicules disponibles
+      fetch('/api/vehicles')
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            setVehicles(data)
+          }
+        })
+
+      // Récupérer toutes les marques
+      fetch('/api/brands')
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            setBrands(data)
+          }
+        })
+
+      // Récupérer les invitations
+      fetch('/api/dealerships/my-dealership/invitations')
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            setInvitations(data)
+          }
+        })
+    }
+  }, [session])
+
+  // Filtrer les véhicules par marque et recherche
+  const filteredVehicles = useMemo(() => {
+    const vehicleIds = new Set(listings.map(l => l.vehicle.id))
+    let filtered = vehicles.filter(v => !vehicleIds.has(v.id))
+
+    if (selectedBrand) {
+      filtered = filtered.filter(v => v.brand.id === selectedBrand)
+    }
+
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      filtered = filtered.filter(v => 
+        v.name.toLowerCase().includes(query) ||
+        v.brand.name.toLowerCase().includes(query)
+      )
+    }
+
+    return filtered
+  }, [vehicles, listings, selectedBrand, searchQuery])
+
+  const handleAddListing = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setMessage('')
+
+    if (!formData.vehicleId || !formData.price) {
+      setError('Veuillez remplir tous les champs obligatoires')
+      return
+    }
+
+    try {
+      const selectedVehicle = vehicles.find(v => v.id === formData.vehicleId)
+      const siteImages = selectedVehicle?.images ? JSON.parse(selectedVehicle.images) : []
+
+      const res = await fetch('/api/dealerships/my-dealership/listings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehicleId: formData.vehicleId,
+          price: parseInt(formData.price),
+          mileage: formData.mileage ? Number(formData.mileage) || null : null,
+          description: formData.description || null,
+          images: useSiteImages && siteImages.length > 0 ? siteImages : (imageUrls.length > 0 ? imageUrls : null),
+        }),
+      })
+
+      const data = await res.json()
+
+      if (res.ok) {
+        setMessage('Annonce ajoutée avec succès!')
+        setListings([data, ...listings])
+        
+        // Rafraîchir les infos du concessionnaire pour mettre à jour le nombre d'annonces
+        fetch('/api/dealerships/my-dealership')
+          .then(res => res.json())
+          .then(data => {
+            if (data.id) {
+              setDealershipInfo(data)
+            }
+          })
+        
+        setFormData({
+          vehicleId: '',
+          price: '',
+          mileage: '',
+          description: '',
+        })
+        setImageUrls([])
+        setSelectedBrand('')
+        setSearchQuery('')
+        setShowAddForm(false)
+      } else {
+        setError(data.error || 'Erreur lors de l\'ajout')
+      }
+    } catch (err) {
+      setError('Une erreur est survenue')
+    }
+  }
+  const [editingListing, setEditingListing] = useState<any>(null)
+  const handleUpdateListing = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setMessage('')
+
+    if (!formData.price) {
+      setError('Veuillez remplir tous les champs obligatoires')
+      return
+    }
+
+    try {
+      const selectedVehicle = vehicles.find(v => v.id === formData.vehicleId)
+      const siteImages = selectedVehicle?.images ? JSON.parse(selectedVehicle.images) : []
+
+      const res = await fetch(`/api/dealerships/my-dealership/listings/${editingListing.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          price: parseInt(formData.price),
+          mileage: formData.mileage ? Number(formData.mileage) || null : null,
+          description: formData.description || null,
+          images: useSiteImages && siteImages.length > 0 ? siteImages : (imageUrls.length > 0 ? imageUrls : null),
+        }),
+      })
+
+      const data = await res.json()
+
+      if (res.ok) {
+        setMessage('Annonce modifiée avec succès!')
+        setListings(listings.map(l => l.id === editingListing.id ? {...l, ...data} : l))
+        
+        // Rafraîchir les infos du concessionnaire pour mettre à jour le nombre d'annonces
+        fetch('/api/dealerships/my-dealership')
+          .then(res => res.json())
+          .then(data => {
+            if (data.id) {
+              setDealershipInfo(data)
+            }
+          })
+        
+        setEditingListing(null)
+        setShowAddForm(false)
+        setFormData({
+          vehicleId: '',
+          price: '',
+          mileage: '',
+          description: '',
+        })
+        setImageUrls([])
+        setUseSiteImages(true)
+      } else {
+        setError(data.error || 'Erreur lors de la modification')
+      }
+    } catch (err) {
+      setError('Une erreur est survenue')
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setEditingListing(null)
+    setFormData({
+      vehicleId: '',
+      price: '',
+      mileage: '',
+      description: '',
+    })
+    setImageUrls([])
+    setUseSiteImages(true)
+  }
+
+  const handleDeleteListing = async (listingId: string) => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer cette annonce?')) return
+
+    try {
+      const res = await fetch(`/api/dealerships/my-dealership/listings/${listingId}`, {
+        method: 'DELETE',
+      })
+
+      if (res.ok) {
+        setListings(listings.filter(l => l.id !== listingId))
+        setMessage('Annonce supprimée avec succès!')
+        
+        // Rafraîchir les infos du concessionnaire pour mettre à jour le nombre d'annonces
+        fetch('/api/dealerships/my-dealership')
+          .then(res => res.json())
+          .then(data => {
+            if (data.id) {
+              setDealershipInfo(data)
+            }
+          })
+      } else {
+        setError('Erreur lors de la suppression')
+      }
+    } catch (err) {
+      setError('Une erreur est survenue')
+    }
+  }
+
+  const handleUpdateDealership = async () => {
+    try {
+      const res = await fetch('/api/dealerships/my-dealership', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: dealershipEditForm.name,
+          description: dealershipEditForm.description,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (res.ok) {
+        setMessage('Informations du concessionnaire mises à jour avec succès!')
+        setDealershipInfo(data)
+        setIsEditingDealership(false)
+      } else {
+        setError(data.error || 'Erreur lors de la mise à jour')
+      }
+    } catch (err) {
+      setError('Une erreur est survenue')
+    }
+  }
+
+  const handleSendInvitation = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setInviteError('')
+    setInviteMessage('')
+    setInviteLoading(true)
+
+    try {
+      const res = await fetch('/api/dealerships/my-dealership/invitations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: newInviteEmail,
+          role: newInviteRole,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (res.ok) {
+        setInviteMessage('Invitation envoyée avec succès!')
+        setNewInviteEmail('')
+        setInvitations([...invitations, data])
+      } else {
+        setInviteError(data.error || 'Erreur lors de l\'envoi de l\'invitation')
+      }
+    } catch (err) {
+      setInviteError('Une erreur est survenue')
+    } finally {
+      setInviteLoading(false)
+    }
+  }
+
+  const handleCancelInvitation = async (invitationId: string) => {
+    if (!confirm('Êtes-vous sûr de vouloir annuler cette invitation?')) return
+
+    try {
+      const res = await fetch(`/api/dealerships/my-dealership/invitations?id=${invitationId}`, {
+        method: 'DELETE',
+      })
+
+      const data = await res.json()
+
+      if (res.ok) {
+        setInviteMessage(data.message)
+        setInvitations(invitations.filter(inv => inv.id !== invitationId))
+      } else {
+        setInviteError(data.error || 'Erreur lors de l\'annulation de l\'invitation')
+      }
+    } catch (err) {
+      setInviteError('Une erreur est survenue')
+    }
+  }
+
+  if (status === 'loading' || loading) {
+    return <div className="min-h-screen flex items-center justify-center text-gray-500">Chargement...</div>
+  }
+
+  return (
+    <div className="min-h-screen py-12 px-4">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="font-display text-4xl font-bold text-white mb-2">
+          Mon <span className="text-primary-400">Concessionnaire</span>
+        </h1>
+        <p className="text-gray-500 mb-12">Gérez vos annonces de véhicules</p>
+
+        {message && (
+          <div className="bg-primary-500/10 border border-primary-500/30 rounded-lg p-4 text-primary-400 mb-6">
+            {message}
+          </div>
+        )}
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-red-400 mb-6">
+            {error}
+          </div>
+        )}
+
+        {/* Ajouter une annonce */}
+        <div className="mb-8">
+          <div className="card p-6 flex items-center justify-between">
+            <div>
+              <h2 className="font-display text-2xl font-bold text-white mb-1">{dealershipInfo?.name || 'Mon Concessionnaire'}</h2>
+              <p className="text-gray-500 text-sm">{dealershipInfo?._count.listings} véhicule{dealershipInfo?._count.listings !== 1 ? 's' : ''} en vente</p>
+            </div>
+            <button 
+              onClick={() => {
+                setIsEditingDealership(true)
+                setDealershipEditForm({
+                  name: dealershipInfo?.name || '',
+                  description: dealershipInfo?.description || '',
+                })
+              }}
+              className="btn-primary text-sm py-2 px-4"
+            >
+              Modifier
+            </button>
+          </div>
+        </div>
+
+        {/* Formulaire d'édition du concessionnaire */}
+        {isEditingDealership && (
+          <div className="card p-6 mb-12">
+            <h2 className="font-display text-2xl font-bold text-white mb-6">Modifier les informations du concessionnaire</h2>
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault()
+                handleUpdateDealership()
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-gray-400 text-sm mb-2">Nom du concessionnaire *</label>
+                <input
+                  type="text"
+                  value={dealershipEditForm.name}
+                  onChange={(e) => setDealershipEditForm({...dealershipEditForm, name: e.target.value})}
+                  className="w-full bg-dark-300 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-primary-500 focus:outline-none"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-gray-400 text-sm mb-2">Description</label>
+                <textarea
+                  value={dealershipEditForm.description}
+                  onChange={(e) => setDealershipEditForm({...dealershipEditForm, description: e.target.value})}
+                  className="w-full bg-dark-300 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-primary-500 focus:outline-none"
+                  rows={3}
+                  placeholder="Décrivez votre concessionnaire..."
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingDealership(false)}
+                  className="btn-secondary flex-1"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary flex-1"
+                >
+                  Enregistrer les modifications
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {!isEditingDealership && (
+          <div className="card p-6 mb-12">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="font-display text-2xl font-bold text-white">Ajouter une annonce</h2>
+              <button
+                onClick={() => setShowAddForm(!showAddForm)}
+                className="btn-primary text-sm py-2 px-4"
+              >
+                {showAddForm ? 'Annuler' : '+ Nouvelle annonce'}
+              </button>
+            </div>
+
+            {showAddForm && (
+              <form onSubmit={editingListing ? handleUpdateListing : handleAddListing} className="space-y-4">
+                {/* Filtres de sélection */}
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-gray-400 text-sm mb-2">Filtrer par marque</label>
+                    <select
+                      value={selectedBrand}
+                      onChange={(e) => setSelectedBrand(e.target.value)}
+                      className="w-full bg-dark-300 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-primary-500 focus:outline-none"
+                    >
+                      <option value="">Toutes les marques</option>
+                      {brands.map(b => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-400 text-sm mb-2">Rechercher un véhicule</label>
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="🔍 Nom du véhicule..."
+                      className="w-full bg-dark-300 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-primary-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Sélection du véhicule */}
+                <div>
+                  <label className="block text-gray-400 text-sm mb-2">Véhicule * ({filteredVehicles.length} disponible{filteredVehicles.length > 1 ? 's' : ''})</label>
+                  <select
+                    value={formData.vehicleId}
+                    onChange={(e) => {
+                      setFormData({ ...formData, vehicleId: e.target.value })
+                      // Reset image selection when vehicle changes
+                      if (useSiteImages) {
+                        setImageUrls([])
+                      }
+                    }}
+                    className="w-full bg-dark-300 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-primary-500 focus:outline-none"
+                    required
+                  >
+                    <option value="">Sélectionner un véhicule</option>
+                    {filteredVehicles.map(v => (
+                      <option key={v.id} value={v.id}>
+                        {v.brand.name} {v.name} - {v.price.toLocaleString()}€
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Option pour choisir les images */}
+                <div className="flex items-center gap-4 pt-2">
+                  <label className="flex items-center gap-2 text-gray-400 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={useSiteImages}
+                      onChange={(e) => setUseSiteImages(e.target.checked)}
+                      className="w-4 h-4 rounded bg-dark-300 border-gray-600 text-primary-500 focus:ring-primary-500"
+                    />
+                    <span>Utiliser les images du site</span>
+                  </label>
+                </div>
+
+                {/* Prix et kilométrage */}
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-gray-400 text-sm mb-2">Prix (€) *</label>
+                    <input
+                      type="number"
+                      value={formData.price}
+                      onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                      className="w-full bg-dark-300 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-primary-500 focus:outline-none"
+                      placeholder="0"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-400 text-sm mb-2">Kilométrage (km)</label>
+                    <input
+                      type="number"
+                      value={formData.mileage}
+                      onChange={(e) => setFormData({ ...formData, mileage: e.target.value })}
+                      className="w-full bg-dark-300 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-primary-500 focus:outline-none"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+
+                {/* Images */}
+                <div>
+                  <label className="block text-gray-400 text-sm mb-2">Images du véhicule (Drag & Drop pour réordonner)</label>
+                  <ImageUpload 
+                    images={imageUrls} 
+                    onChange={setImageUrls} 
+                  />
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="block text-gray-400 text-sm mb-2">Description</label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    className="w-full bg-dark-300 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-primary-500 focus:outline-none"
+                    rows={3}
+                    placeholder="Décrivez le véhicule..."
+                  />
+                </div>
+
+                <button type="submit" className="btn-primary w-full">
+                  {editingListing ? 'Enregistrer les modifications' : 'Ajouter l\'annonce'}
+                </button>
+                {editingListing && (
+                  <button 
+                    type="button" 
+                    onClick={handleCancelEdit}
+                    className="btn-secondary w-full mt-2"
+                  >
+                    Annuler la modification
+                  </button>
+                )}
+              </form>
+            )}
+          </div>
+        )}
+
+        {/* Annonces existantes */}
+        <div>
+          <h2 className="font-display text-2xl font-bold text-white mb-6">
+            Mes annonces ({listings.length})
+          </h2>
+
+          {listings.length === 0 ? (
+            <div className="card p-12 text-center text-gray-500">
+              Vous n'avez pas encore d'annonces. Commencez par en ajouter une!
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {listings.map(listing => {
+                const images = listing.images ? JSON.parse(listing.images) : []
+                return (
+                  <div key={listing.id} className="card overflow-hidden">
+                    {images.length > 0 && (
+                      <div className="aspect-video bg-dark-300 relative overflow-hidden">
+                        <img 
+                          src={images[0]} 
+                          alt={listing.vehicle.name} 
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
+                    <div className="p-4">
+                      <p className="text-primary-400 text-sm mb-1">{listing.vehicle.brand.name}</p>
+                      <h3 className="font-display text-lg font-bold text-white mb-2">
+                        {listing.vehicle.name}
+                      </h3>
+
+                      <div className="space-y-1 text-sm text-gray-400 mb-4">
+                        {listing.mileage && <p>Kilométrage: {listing.mileage.toLocaleString()} km</p>}
+                        {listing.description && (
+                          <p className="text-xs line-clamp-2">{listing.description}</p>
+                        )}
+                      </div>
+
+                      <div className="border-t border-gray-700 pt-4 flex items-center justify-between">
+                        <span className="text-xl font-bold text-primary-400">
+                          {listing.price.toLocaleString()} €
+                        </span>
+                        <button
+                          onClick={() => handleDeleteListing(listing.id)}
+                          className="text-red-400 hover:text-red-300 text-sm transition"
+                        >
+                          Supprimer
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingListing({ id: listing.id })
+                            setFormData({
+                              vehicleId: listing.vehicle.id,
+                              price: listing.price.toString(),
+                              mileage: listing.mileage?.toString() || '',
+                              description: listing.description || '',
+                            })
+                            setImageUrls(listing.images ? JSON.parse(listing.images) : [])
+                            // Set useSiteImages based on whether the listing uses site images
+                            const vehicle = vehicles.find(v => v.id === listing.vehicle.id)
+                            const siteImages = vehicle?.images ? JSON.parse(vehicle.images) : []
+                            const listingImages = listing.images ? JSON.parse(listing.images) : []
+                            setUseSiteImages(JSON.stringify(siteImages) === JSON.stringify(listingImages))
+                            setShowAddForm(true)
+                          }}
+                          className="text-yellow-400 hover:text-yellow-300 text-sm transition ml-2"
+                        >
+                          Modifier
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Section d'invitations */}
+        <div className="mt-12">
+          <h2 className="font-display text-2xl font-bold text-white mb-6">
+            Inviter des membres
+          </h2>
+          
+          <div className="card p-6">
+            <form onSubmit={handleSendInvitation} className="space-y-4">
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-gray-400 text-sm mb-2">Email du membre *</label>
+                  <input
+                    type="email"
+                    value={newInviteEmail}
+                    onChange={(e) => setNewInviteEmail(e.target.value)}
+                    className="w-full bg-dark-300 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-primary-500 focus:outline-none"
+                    placeholder="email@membre.com"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-400 text-sm mb-2">Rôle *</label>
+                  <select
+                    value={newInviteRole}
+                    onChange={(e) => setNewInviteRole(e.target.value)}
+                    className="w-full bg-dark-300 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-primary-500 focus:outline-none"
+                    required
+                  >
+                    <option value="employee">Employé</option>
+                    <option value="manager">Manager</option>
+                  </select>
+                </div>
+              </div>
+              
+              <button 
+                type="submit" 
+                className="btn-primary w-full"
+                disabled={inviteLoading}
+              >
+                {inviteLoading ? 'Envoi en cours...' : 'Envoyer l\'invitation'}
+              </button>
+            </form>
+            
+            {(inviteMessage || inviteError) && (
+              <div className={`mt-4 p-4 rounded-lg ${inviteMessage ? 'bg-green-500/10 border border-green-500/30 text-green-400' : 'bg-red-500/10 border border-red-500/30 text-red-400'}`}>
+                {inviteMessage || inviteError}
+              </div>
+            )}
+          </div>
+
+          {/* Liste des invitations en attente */}
+          {invitations.length > 0 && (
+            <div className="mt-8">
+              <h3 className="font-display text-xl font-bold text-white mb-4">
+                Invitations en attente ({invitations.length})
+              </h3>
+              
+              <div className="space-y-3">
+                {invitations.map(invitation => (
+                  <div key={invitation.id} className="card p-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-white font-medium">{invitation.email}</p>
+                      <p className="text-gray-400 text-sm capitalize">Rôle: {invitation.role}</p>
+                      <p className="text-gray-500 text-xs">Envoyée: {new Date(invitation.createdAt).toLocaleDateString()}</p>
+                    </div>
+                    <button
+                      onClick={() => handleCancelInvitation(invitation.id)}
+                      className="text-red-400 hover:text-red-300 text-sm transition"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

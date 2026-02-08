@@ -1,0 +1,48 @@
+{
+  "name": "arma-for-life-concession",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "lint": "next lint",
+    "postinstall": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "node prisma/seed.js",
+    "db:studio": "prisma studio",
+    "db:check": "node check-db.js"
+  },
+  "dependencies": {
+    "@prisma/client": "5.9.0",
+    "@supabase/supabase-js": "^2.90.1",
+    "bcryptjs": "2.4.3",
+    "next": "^14.2.18",
+    "next-auth": "4.24.5",
+    "nodemailer": "^6.9.8",
+    "pg": "^8.17.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "sharp": "^0.34.5",
+    "zod": "3.22.4"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "2.4.6",
+    "@types/node": "20.11.0",
+    "@types/nodemailer": "^6.4.14",
+    "@types/pg": "^8.16.0",
+    "@types/react": "18.2.48",
+    "@types/react-dom": "18.2.18",
+    "autoprefixer": "10.4.17",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.18",
+    "postcss": "8.4.33",
+    "prisma": "5.9.0",
+    "supabase": "^2.72.8",
+    "tailwindcss": "3.4.1",
+    "typescript": "5.3.3"
+  }
+}

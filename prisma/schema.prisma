@@ -1,0 +1,162 @@
+// Schéma Prisma pour Arma For Life - Concession Automobile
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Rôles personnalisés
+model Role {
+  id               String   @id @default(cuid())
+  name             String   @unique
+  canAccessAdmin   Boolean  @default(false)
+  canEditBrands    Boolean  @default(false)
+  canEditVehicles  Boolean  @default(false)
+  canDeleteBrands  Boolean  @default(false)
+  canDeleteVehicles Boolean @default(false)
+  canImport        Boolean  @default(false)
+  canManageUsers   Boolean  @default(false)
+  canManageRoles   Boolean  @default(false)
+  canManageDealerships Boolean @default(false)
+  canManageSite     Boolean @default(false)
+  isSystem         Boolean  @default(false) // true pour superadmin/admin/user
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  users            User[]
+}
+
+// Utilisateurs du site
+model User {
+  id                String    @id @default(cuid())
+  username          String?   @unique
+  email             String?   @unique
+  password          String?
+  image             String?
+  roleId            String?
+  role              Role?     @relation(fields: [roleId], references: [id])
+  isVerified        Boolean   @default(false)
+  verificationCode  String?
+  codeExpires       DateTime?
+  verificationAttempts Int    @default(0)
+  // Changement de mot de passe
+  passwordChangeToken String?
+  passwordChangeExpires DateTime?
+  passwordChangePending String? // Hashed new password
+  // Changement d'e-mail
+  emailChangeToken  String?
+  emailChangeExpires DateTime?
+  emailChangePending String? // Nouvel e-mail en attente
+  // Couleur du thème personnalisée
+  themeColor        String?  // Code couleur hex (ex: #a855f7 pour violet)
+  // Concessionnaire associé
+  dealershipMemberships UserDealership[]
+  sentInvitations DealershipInvitation[] @relation("InvitationSender")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+// Marques de véhicules
+model Brand {
+  id                String    @id @default(cuid())
+  name              String    @unique
+  logo              String?
+  dealershipName    String?   @default("Concessionnaire")
+  dealershipLocation String?  @default("Inconnu")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  vehicles          Vehicle[]
+}
+
+// Véhicules
+model Vehicle {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  price       Int
+  power       Int?
+  trunk       Int?
+  vmax        Int?
+  seats       Int?
+  images      String
+  brandId     String
+  brand       Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  category    String?
+  listings    DealershipListing[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Paramètres du site
+model SiteSettings {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Concessionnaires
+model Dealership {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  logo        String?
+  // Propriétaire de la concession (stocké dans UserDealership avec rôle 'owner')
+  users       UserDealership[] // Relation plusieurs-à-plusieurs avec les utilisateurs
+  invitations DealershipInvitation[] // Invitations envoyées pour cette concession
+  listings    DealershipListing[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Relation entre utilisateur et concession
+model UserDealership {
+  id             String      @id @default(cuid())
+  userId         String
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dealershipId   String
+  dealership     Dealership  @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  role           String      // "owner", "manager", "employee"
+  createdAt      DateTime    @default(now())
+  
+  @@unique([userId, dealershipId])
+  @@index([role]) // Index pour rechercher les propriétaires
+}
+
+// Invitations pour les concessionnaires
+model DealershipInvitation {
+  id             String      @id @default(cuid())
+  email          String      // Email de la personne invitée
+  dealershipId   String
+  dealership     Dealership  @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  senderId       String      // Utilisateur qui a envoyé l'invitation
+  sender         User        @relation("InvitationSender", fields: [senderId], references: [id], onDelete: Cascade)
+  role           String      // Rôle attribué à l'utilisateur après acceptation
+  token          String      @unique // Token pour valider l'invitation
+  expiresAt      DateTime    // Date d'expiration de l'invitation
+  acceptedAt     DateTime?
+  declinedAt     DateTime?
+  createdAt      DateTime    @default(now())
+}
+
+// Véhicules en vente par les concessionnaires
+model DealershipListing {
+  id           String   @id @default(cuid())
+  dealershipId String
+  dealership   Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  vehicleId    String
+  vehicle      Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  price        Int      // Prix de vente par le concessionnaire (peut être différent du prix d'origine)
+  images       String?  // Images supplémentaires du concessionnaire (JSON array)
+  mileage      Int?     // Kilométrage pour l'occasion
+  description  String?  // Description additionnelle
+  isAvailable  Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@unique([dealershipId, vehicleId])
+}
