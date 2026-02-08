@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
     for (const brand of brands) {
       if (brand.logo && needsConversion(brand.logo)) {
         try {
+          console.log(`Converting Brand logo: ${brand.logo}`);
           const newUrl = await processImageUrl(brand.logo);
           if (newUrl) {
             await prisma.brand.update({
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest) {
             results.totalConverted++;
           }
         } catch (e: any) {
+          console.error(`Error converting brand ${brand.name}:`, e);
           results.errors.push(`Brand ${brand.name}: ${e.message}`);
         }
       }
@@ -58,6 +60,7 @@ export async function POST(req: NextRequest) {
     for (const dealership of dealerships) {
       if (dealership.logo && needsConversion(dealership.logo)) {
         try {
+          console.log(`Converting Dealership logo: ${dealership.logo}`);
           const newUrl = await processImageUrl(dealership.logo);
           if (newUrl) {
             await prisma.dealership.update({
@@ -68,6 +71,7 @@ export async function POST(req: NextRequest) {
             results.totalConverted++;
           }
         } catch (e: any) {
+          console.error(`Error converting dealership ${dealership.name}:`, e);
           results.errors.push(`Dealership ${dealership.name}: ${e.message}`);
         }
       }
@@ -89,11 +93,17 @@ export async function POST(req: NextRequest) {
         let changed = false;
         const newImages = await Promise.all(images.map(async (url) => {
           if (needsConversion(url)) {
-            const newUrl = await processImageUrl(url);
-            if (newUrl) {
-              changed = true;
-              results.totalConverted++;
-              return newUrl;
+            try {
+              console.log(`Converting image: ${url}`);
+              const newUrl = await processImageUrl(url);
+              if (newUrl) {
+                changed = true;
+                results.totalConverted++;
+                return newUrl;
+              }
+            } catch (e: any) {
+              console.error(`Error converting image ${url}:`, e);
+              results.errors.push(`Image ${url}: ${e.message}`);
             }
           }
           return url;
@@ -129,11 +139,17 @@ export async function POST(req: NextRequest) {
         let changed = false;
         const newImages = await Promise.all(images.map(async (url) => {
           if (needsConversion(url)) {
-            const newUrl = await processImageUrl(url);
-            if (newUrl) {
-              changed = true;
-              results.totalConverted++;
-              return newUrl;
+            try {
+              console.log(`Converting image: ${url}`);
+              const newUrl = await processImageUrl(url);
+              if (newUrl) {
+                changed = true;
+                results.totalConverted++;
+                return newUrl;
+              }
+            } catch (e: any) {
+              console.error(`Error converting image ${url}:`, e);
+              results.errors.push(`Image ${url}: ${e.message}`);
             }
           }
           return url;
@@ -173,10 +189,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, results });
+    return NextResponse.json({ 
+      success: results.errors.length === 0, 
+      results,
+      message: results.errors.length > 0 
+        ? `Conversion terminée avec ${results.errors.length} erreurs.` 
+        : 'Conversion réussie !'
+    });
   } catch (error: any) {
-    console.error('Migration error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('Migration crash:', error);
+    return NextResponse.json({ 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    }, { status: 500 });
   }
 }
 

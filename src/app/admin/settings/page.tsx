@@ -99,9 +99,14 @@ export default function AdminSettingsPage() {
       const data = await res.json()
       
       if (res.ok) {
-        setMessage(`Conversion terminée ! ${data.results.totalConverted} images ont été converties en WebP.`)
+        if (data.results?.errors?.length > 0) {
+          setError(`Conversion terminée avec ${data.results.errors.length} erreurs. Voir la console pour les détails.`);
+          setMessage(`${data.results.totalConverted} images converties.`);
+        } else {
+          setMessage(`Conversion terminée ! ${data.results.totalConverted} images ont été converties en WebP.`);
+        }
       } else {
-        setError(data.error || 'Erreur lors de la conversion')
+        setError(data.error || 'Erreur lors de la conversion');
       }
     } catch (err) {
       setError('Erreur lors de la conversion')
